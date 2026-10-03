@@ -1,0 +1,658 @@
+{
+  "protocol": {
+    "provenance": {
+      "dataset": "CIFAR-100 (100 classes, 600 images per class)",
+      "loader": "torchvision.datasets.CIFAR100",
+      "official_train_samples": 50000,
+      "official_test_samples": 10000,
+      "coursework": "Protocol rebuild of the CSC781 Module 8 Assignment 9 transfer-learning exercise; no historical outputs or report scores are reused.",
+      "initial_weights": {
+        "scratch": "weights=None (random initialisation)",
+        "pretrained": {
+          "name": "DenseNet161_Weights.IMAGENET1K_V1",
+          "url": "https://download.pytorch.org/models/densenet161-8d451a50.pth",
+          "source_imagenet_1k_metrics": {
+            "acc@1": 77.138,
+            "acc@5": 93.56
+          },
+          "note": "publicly reported metadata of the checkpoint, not a result of this experiment; the pretrained variant loads these weights and replaces the 1000-class head with a fresh 100-class head"
+        }
+      }
+    },
+    "splits": {
+      "strategy": "stratified 90/10 carve of the official CIFAR-100 training split",
+      "seed": 42,
+      "policy": "both variants train on the same 45000 images and select checkpoints on the same 5000 development images; the official 10000-image test split is a separate dataset scored once after selection",
+      "counts": {
+        "train": 45000,
+        "dev": 5000,
+        "test": 10000
+      },
+      "class_counts": {
+        "train": {
+          "0": 450,
+          "1": 450,
+          "2": 450,
+          "3": 450,
+          "4": 450,
+          "5": 450,
+          "6": 450,
+          "7": 450,
+          "8": 450,
+          "9": 450,
+          "10": 450,
+          "11": 450,
+          "12": 450,
+          "13": 450,
+          "14": 450,
+          "15": 450,
+          "16": 450,
+          "17": 450,
+          "18": 450,
+          "19": 450,
+          "20": 450,
+          "21": 450,
+          "22": 450,
+          "23": 450,
+          "24": 450,
+          "25": 450,
+          "26": 450,
+          "27": 450,
+          "28": 450,
+          "29": 450,
+          "30": 450,
+          "31": 450,
+          "32": 450,
+          "33": 450,
+          "34": 450,
+          "35": 450,
+          "36": 450,
+          "37": 450,
+          "38": 450,
+          "39": 450,
+          "40": 450,
+          "41": 450,
+          "42": 450,
+          "43": 450,
+          "44": 450,
+          "45": 450,
+          "46": 450,
+          "47": 450,
+          "48": 450,
+          "49": 450,
+          "50": 450,
+          "51": 450,
+          "52": 450,
+          "53": 450,
+          "54": 450,
+          "55": 450,
+          "56": 450,
+          "57": 450,
+          "58": 450,
+          "59": 450,
+          "60": 450,
+          "61": 450,
+          "62": 450,
+          "63": 450,
+          "64": 450,
+          "65": 450,
+          "66": 450,
+          "67": 450,
+          "68": 450,
+          "69": 450,
+          "70": 450,
+          "71": 450,
+          "72": 450,
+          "73": 450,
+          "74": 450,
+          "75": 450,
+          "76": 450,
+          "77": 450,
+          "78": 450,
+          "79": 450,
+          "80": 450,
+          "81": 450,
+          "82": 450,
+          "83": 450,
+          "84": 450,
+          "85": 450,
+          "86": 450,
+          "87": 450,
+          "88": 450,
+          "89": 450,
+          "90": 450,
+          "91": 450,
+          "92": 450,
+          "93": 450,
+          "94": 450,
+          "95": 450,
+          "96": 450,
+          "97": 450,
+          "98": 450,
+          "99": 450
+        },
+        "dev": {
+          "0": 50,
+          "1": 50,
+          "2": 50,
+          "3": 50,
+          "4": 50,
+          "5": 50,
+          "6": 50,
+          "7": 50,
+          "8": 50,
+          "9": 50,
+          "10": 50,
+          "11": 50,
+          "12": 50,
+          "13": 50,
+          "14": 50,
+          "15": 50,
+          "16": 50,
+          "17": 50,
+          "18": 50,
+          "19": 50,
+          "20": 50,
+          "21": 50,
+          "22": 50,
+          "23": 50,
+          "24": 50,
+          "25": 50,
+          "26": 50,
+          "27": 50,
+          "28": 50,
+          "29": 50,
+          "30": 50,
+          "31": 50,
+          "32": 50,
+          "33": 50,
+          "34": 50,
+          "35": 50,
+          "36": 50,
+          "37": 50,
+          "38": 50,
+          "39": 50,
+          "40": 50,
+          "41": 50,
+          "42": 50,
+          "43": 50,
+          "44": 50,
+          "45": 50,
+          "46": 50,
+          "47": 50,
+          "48": 50,
+          "49": 50,
+          "50": 50,
+          "51": 50,
+          "52": 50,
+          "53": 50,
+          "54": 50,
+          "55": 50,
+          "56": 50,
+          "57": 50,
+          "58": 50,
+          "59": 50,
+          "60": 50,
+          "61": 50,
+          "62": 50,
+          "63": 50,
+          "64": 50,
+          "65": 50,
+          "66": 50,
+          "67": 50,
+          "68": 50,
+          "69": 50,
+          "70": 50,
+          "71": 50,
+          "72": 50,
+          "73": 50,
+          "74": 50,
+          "75": 50,
+          "76": 50,
+          "77": 50,
+          "78": 50,
+          "79": 50,
+          "80": 50,
+          "81": 50,
+          "82": 50,
+          "83": 50,
+          "84": 50,
+          "85": 50,
+          "86": 50,
+          "87": 50,
+          "88": 50,
+          "89": 50,
+          "90": 50,
+          "91": 50,
+          "92": 50,
+          "93": 50,
+          "94": 50,
+          "95": 50,
+          "96": 50,
+          "97": 50,
+          "98": 50,
+          "99": 50
+        },
+        "test": {
+          "0": 100,
+          "1": 100,
+          "2": 100,
+          "3": 100,
+          "4": 100,
+          "5": 100,
+          "6": 100,
+          "7": 100,
+          "8": 100,
+          "9": 100,
+          "10": 100,
+          "11": 100,
+          "12": 100,
+          "13": 100,
+          "14": 100,
+          "15": 100,
+          "16": 100,
+          "17": 100,
+          "18": 100,
+          "19": 100,
+          "20": 100,
+          "21": 100,
+          "22": 100,
+          "23": 100,
+          "24": 100,
+          "25": 100,
+          "26": 100,
+          "27": 100,
+          "28": 100,
+          "29": 100,
+          "30": 100,
+          "31": 100,
+          "32": 100,
+          "33": 100,
+          "34": 100,
+          "35": 100,
+          "36": 100,
+          "37": 100,
+          "38": 100,
+          "39": 100,
+          "40": 100,
+          "41": 100,
+          "42": 100,
+          "43": 100,
+          "44": 100,
+          "45": 100,
+          "46": 100,
+          "47": 100,
+          "48": 100,
+          "49": 100,
+          "50": 100,
+          "51": 100,
+          "52": 100,
+          "53": 100,
+          "54": 100,
+          "55": 100,
+          "56": 100,
+          "57": 100,
+          "58": 100,
+          "59": 100,
+          "60": 100,
+          "61": 100,
+          "62": 100,
+          "63": 100,
+          "64": 100,
+          "65": 100,
+          "66": 100,
+          "67": 100,
+          "68": 100,
+          "69": 100,
+          "70": 100,
+          "71": 100,
+          "72": 100,
+          "73": 100,
+          "74": 100,
+          "75": 100,
+          "76": 100,
+          "77": 100,
+          "78": 100,
+          "79": 100,
+          "80": 100,
+          "81": 100,
+          "82": 100,
+          "83": 100,
+          "84": 100,
+          "85": 100,
+          "86": 100,
+          "87": 100,
+          "88": 100,
+          "89": 100,
+          "90": 100,
+          "91": 100,
+          "92": 100,
+          "93": 100,
+          "94": 100,
+          "95": 100,
+          "96": 100,
+          "97": 100,
+          "98": 100,
+          "99": 100
+        }
+      }
+    },
+    "preprocessing": {
+      "source": "DenseNet161_Weights.IMAGENET1K_V1.transforms",
+      "resize_size": 74,
+      "crop_size": 64,
+      "interpolation": "bilinear",
+      "antialias": true,
+      "mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "std": [
+        0.229,
+        0.224,
+        0.225
+      ],
+      "note": "crop_size=64 / resize_size=74 override the weights' standard 224/256 resolution; normalisation constants and bilinear interpolation are inherited from the weights recipe, and both variants share this transform"
+    },
+    "seeds": {
+      "model_and_shuffle": [
+        42
+      ],
+      "split": 42,
+      "python_random": "random.seed(seed)",
+      "numpy": "np.random.seed(seed)",
+      "torch": "torch.manual_seed(seed)",
+      "dataloader_shuffle": "torch.Generator().manual_seed(seed), shared by both variants",
+      "cudnn": "deterministic=True, benchmark=False when CUDA is used"
+    },
+    "hyperparameters": {
+      "optimizer": "torch.optim.SGD",
+      "learning_rate": 0.01,
+      "momentum": 0.9,
+      "weight_decay": 0.0,
+      "batch_size": 32,
+      "epochs": 1,
+      "loss": "torch.nn.CrossEntropyLoss",
+      "loader_workers": 0,
+      "torch_threads": 4
+    },
+    "device": "cpu",
+    "selection": {
+      "criterion": "best development macro F1 over all 100 classes",
+      "tie_break": "earliest epoch",
+      "held_out": "the official test split is evaluated once per run after reloading the selected checkpoint"
+    },
+    "budget": {
+      "policy": "fixed epoch budget (default 1 epoch); this is a disclosed compute budget, not a convergence criterion"
+    },
+    "freezing": {
+      "scratch": "every parameter is trainable",
+      "pretrained": "all backbone parameters require no gradient and the features module is re-applied to eval() after every model.train(), so BatchNorm running buffers stay frozen; only the replacement classifier is optimised",
+      "optimizer_parameters": "only parameters with requires_grad=True",
+      "caveat": "the pretrained variant therefore has far fewer trainable parameters than the scratch variant; the comparison measures initialisation plus freezing as deployed, not an equal-parameter-count control",
+      "parameter_counts": {
+        "scratch": {
+          "total": 26692900,
+          "trainable": 26692900
+        },
+        "pretrained": {
+          "total": 26692900,
+          "trainable": 220900
+        }
+      }
+    },
+    "metrics": {
+      "loss": "sample-count-weighted mean cross-entropy across batches",
+      "accuracy": "fraction of correctly classified samples",
+      "macro_f1": "unweighted mean of per-class F1 over all 100 CIFAR-100 classes (zero_division=0)"
+    }
+  },
+  "environment": {
+    "python": {
+      "version": "3.12.13",
+      "implementation": "CPython"
+    },
+    "os": {
+      "system": "Linux",
+      "release": "7.1.8-201.nobara.fc44.x86_64",
+      "machine": "x86_64"
+    },
+    "cpu_count": 16,
+    "cpu_model": "AMD Ryzen 7 7840U w/ Radeon  780M Graphics",
+    "packages": {
+      "numpy": "2.5.3",
+      "scipy": "1.18.1",
+      "scikit-learn": "1.9.1",
+      "matplotlib": "3.11.2",
+      "torch": "2.6.0+cpu",
+      "torchvision": "0.21.0+cpu"
+    }
+  },
+  "runs": {
+    "scratch": [
+      {
+        "variant": "scratch",
+        "seed": 42,
+        "device": "cpu",
+        "epochs": 1,
+        "backbone": {
+          "module": "features",
+          "frozen": false,
+          "frozen_eval_prefixes": []
+        },
+        "parameters": {
+          "total": 26692900,
+          "trainable": 26692900,
+          "frozen": 0
+        },
+        "history": [
+          {
+            "epoch": 1,
+            "train_loss": 3.728830025566949,
+            "train_seconds": 959.2539342340006,
+            "dev_loss": 3.1647366737365723,
+            "dev_accuracy": 0.2308,
+            "dev_macro_f1": 0.20703268401673916,
+            "dev_seconds": 31.516870219998964
+          }
+        ],
+        "selection": {
+          "criterion": "dev_macro_f1",
+          "epoch": 1,
+          "dev_macro_f1": 0.20703268401673916,
+          "tie_break": "first epoch with the best development macro F1"
+        },
+        "final_test": {
+          "loss": 3.1360283050537108,
+          "accuracy": 0.2328,
+          "macro_f1": 0.21034963923628947,
+          "samples": 10000
+        },
+        "timings_seconds": {
+          "train": 959.2539342340006,
+          "dev": 31.516870219998964,
+          "test": 63.387078957000995,
+          "total": 1054.5542658679988
+        }
+      }
+    ],
+    "pretrained": [
+      {
+        "variant": "pretrained",
+        "seed": 42,
+        "device": "cpu",
+        "epochs": 1,
+        "backbone": {
+          "module": "features",
+          "frozen": true,
+          "frozen_eval_prefixes": [
+            "features"
+          ]
+        },
+        "parameters": {
+          "total": 26692900,
+          "trainable": 220900,
+          "frozen": 26472000
+        },
+        "history": [
+          {
+            "epoch": 1,
+            "train_loss": 6.71002375064426,
+            "train_seconds": 291.61060738800006,
+            "dev_loss": 6.612100372314453,
+            "dev_accuracy": 0.4886,
+            "dev_macro_f1": 0.4904249446661559,
+            "dev_seconds": 32.387135490998844
+          }
+        ],
+        "selection": {
+          "criterion": "dev_macro_f1",
+          "epoch": 1,
+          "dev_macro_f1": 0.4904249446661559,
+          "tie_break": "first epoch with the best development macro F1"
+        },
+        "final_test": {
+          "loss": 6.906897565460205,
+          "accuracy": 0.4884,
+          "macro_f1": 0.48536139815922974,
+          "samples": 10000
+        },
+        "timings_seconds": {
+          "train": 291.61060738800006,
+          "dev": 32.387135490998844,
+          "test": 64.81108732299981,
+          "total": 389.263592786001
+        }
+      }
+    ]
+  },
+  "summary": {
+    "std_kind": "population standard deviation across the recorded seeds",
+    "per_variant": {
+      "scratch": {
+        "seeds": [
+          42
+        ],
+        "final_test": {
+          "loss": {
+            "values": [
+              3.1360283050537108
+            ],
+            "mean": 3.1360283050537108,
+            "std": 0.0,
+            "min": 3.1360283050537108,
+            "max": 3.1360283050537108
+          },
+          "accuracy": {
+            "values": [
+              0.2328
+            ],
+            "mean": 0.2328,
+            "std": 0.0,
+            "min": 0.2328,
+            "max": 0.2328
+          },
+          "macro_f1": {
+            "values": [
+              0.21034963923628947
+            ],
+            "mean": 0.21034963923628947,
+            "std": 0.0,
+            "min": 0.21034963923628947,
+            "max": 0.21034963923628947
+          }
+        },
+        "selected_dev_macro_f1": {
+          "values": [
+            0.20703268401673916
+          ],
+          "mean": 0.20703268401673916,
+          "std": 0.0,
+          "min": 0.20703268401673916,
+          "max": 0.20703268401673916
+        },
+        "selected_epoch": {
+          "values": [
+            1.0
+          ],
+          "mean": 1.0,
+          "std": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "parameters": {
+          "total": 26692900,
+          "trainable": 26692900,
+          "frozen": 0
+        }
+      },
+      "pretrained": {
+        "seeds": [
+          42
+        ],
+        "final_test": {
+          "loss": {
+            "values": [
+              6.906897565460205
+            ],
+            "mean": 6.906897565460205,
+            "std": 0.0,
+            "min": 6.906897565460205,
+            "max": 6.906897565460205
+          },
+          "accuracy": {
+            "values": [
+              0.4884
+            ],
+            "mean": 0.4884,
+            "std": 0.0,
+            "min": 0.4884,
+            "max": 0.4884
+          },
+          "macro_f1": {
+            "values": [
+              0.48536139815922974
+            ],
+            "mean": 0.48536139815922974,
+            "std": 0.0,
+            "min": 0.48536139815922974,
+            "max": 0.48536139815922974
+          }
+        },
+        "selected_dev_macro_f1": {
+          "values": [
+            0.4904249446661559
+          ],
+          "mean": 0.4904249446661559,
+          "std": 0.0,
+          "min": 0.4904249446661559,
+          "max": 0.4904249446661559
+        },
+        "selected_epoch": {
+          "values": [
+            1.0
+          ],
+          "mean": 1.0,
+          "std": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "parameters": {
+          "total": 26692900,
+          "trainable": 220900,
+          "frozen": 26472000
+        }
+      }
+    },
+    "delta_pretrained_minus_scratch": {
+      "loss": 3.770869260406494,
+      "accuracy": 0.2556,
+      "macro_f1": 0.2750117589229403
+    }
+  },
+  "figures": {
+    "learning_curves": "transfer_learning_curves.png",
+    "comparison": "transfer_comparison.png"
+  }
+}

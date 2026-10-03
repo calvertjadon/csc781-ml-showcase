@@ -1,0 +1,42 @@
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+.venv*/
+venv/
+env/
+
+# Notebook checkpoints and executed copies written by nbclient
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+*_executed.ipynb
+
+# Downloaded datasets, checkpoints, and model weights
+data/
+artifacts/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+*.npz
+*.npy
+
+# Local environment files, logs, and editor/OS artifacts
+.env
+.env.*
+!.env.example
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# uv.lock and everything under results/ (JSON metrics and PNG figures) are
+# committed on purpose: they are the reproducible evidence this showcase publishes.
