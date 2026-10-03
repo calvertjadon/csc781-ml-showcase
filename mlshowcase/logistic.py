@@ -1,53 +1,26 @@
-"""Numerically stable logistic regression and a leakage-safe three-seed experiment.
+"""Numerically stable logistic regression and a leakage-free three-seed experiment.
 
-The reusable part of this module is a from-scratch NumPy implementation of
-binary logistic regression: an overflow-free sigmoid, a finite logaddexp
-cross-entropy with its analytic gradient, handwritten full-batch gradient
-descent with an explicit convergence policy, and a train-only z-score scaler
-that survives constant feature columns.
+The module implements binary logistic regression in NumPy: an overflow-free
+sigmoid, a finite ``logaddexp`` cross-entropy with its analytic gradient,
+full-batch gradient descent that returns a ``FitResult`` with the fitted
+parameters and the per-step history, and a z-score scaler that stores training
+statistics, keeps scale 1.0 for zero-variance columns, and never refits. The
+loss and gradient functions stay public so callers can check the gradient
+against central finite differences of the loss.
 
-The experiment part rebuilds the CSC781 Module 6 Assignment 6 protocol as a
-seeded, stratified, selection-safe run and compares the handwritten
-implementation with an unregularized ``sklearn.linear_model.LogisticRegression``
-baseline on identical data. Run it from the repository root::
+The experiment reruns the CSC781 Module 6 Assignment 6 protocol with fixed
+seeds and a stratified split into train, dev and test parts. It fits one model
+per learning rate, chooses the learning rate and decision threshold together on
+the dev split, and scores the test split only after that. An unregularized
+``sklearn.linear_model.LogisticRegression`` baseline runs on identical data.
+Run it from the repository root::
 
     uv run --locked python -m mlshowcase.logistic --output-dir results --seeds 42 43 44
 
-The run writes ``logistic.json`` and two PNG figures into the output directory.
-
-Public interface
-----------------
-``sigmoid(z)``
-    Logistic function in a two-branch form that never exponentiates a
-    positive number, so large-magnitude scores cannot overflow and no warning
-    suppression is needed.
-``cross_entropy(y, logits)``, ``logistic_loss(X, y, theta)``,
-``logistic_gradient(X, y, theta)``
-    Mean binary cross-entropy computed through ``numpy.logaddexp`` plus its
-    analytic gradient; both are public so callers can compare the gradient
-    against central finite differences of the loss.
-``fit(X, y, learning_rate, max_steps, tolerance)``
-    Full-batch gradient descent returning a frozen ``FitResult`` with the
-    fitted parameters and the optimization history; ``loss_history[k]`` is
-    measured at the parameters after ``k`` updates (index 0 is the zero
-    initialization), so the last entry always describes the returned
-    ``theta``.
-``FeatureScaler``
-    Z-score scaler fitted once on training data and reused for every later
-    split; zero-variance columns keep a scale of 1.0.
-``predict_proba(X, theta)`` / ``predict(X, theta, threshold)``
-    Positive-class probabilities and hard labels for a fitted parameter
-    vector.
-``binary_metrics(y_true, probabilities, threshold)``
-    Accuracy, positive-class precision/recall/F1, ROC AUC and confusion
-    matrix for the positive class 1.
-``run_experiment(seeds)``
-    Seeded experiment returning the JSON-ready evidence payload.
-``write_figures(runs, summary, output_dir)``
-    The two PNG figures (training-loss curves and baseline comparison).
-``main(argv=None)``
-    Guarded command line entry point. See ``docs/logistic.md`` and
-    ``results/logistic.json``.
+The run writes ``logistic.json`` and two PNG figures into the output directory,
+one showing training loss per seed and one comparing the selected model with
+the baseline. See ``docs/logistic.md`` and ``results/logistic.json`` for the
+protocol and the recorded evidence.
 """
 
 from __future__ import annotations
@@ -74,8 +47,8 @@ from sklearn.metrics import (
 
 from mlshowcase.common import environment, stratified_split, write_results
 
-# Figures are always written to PNG files, so pin a headless backend that
-# behaves identically in a terminal and in headless renders.
+# Figures are always written to PNG files, so select the headless Agg backend,
+# which behaves the same in a terminal and in headless runs.
 plt.switch_backend("Agg")
 
 DEFAULT_SEEDS: tuple[int, ...] = (42, 43, 44)
@@ -90,7 +63,7 @@ LOSS_FIGURE = "logistic_loss.png"
 COMPARISON_FIGURE = "logistic_comparison.png"
 
 
-# %% Stable primitives
+# %% Stable numerics
 def sigmoid(z: np.ndarray) -> np.ndarray:
     """Logistic function ``1 / (1 + exp(-z))`` without overflow.
 
@@ -137,8 +110,8 @@ def cross_entropy(y: np.ndarray, logits: np.ndarray) -> float:
 
     Each sample contributes ``logaddexp(0, -z)`` when ``y == 1`` and
     ``logaddexp(0, z)`` when ``y == 0``. That equals the usual
-    ``-log(sigmoid(z))`` / ``-log(1 - sigmoid(z))`` pair but stays finite for
-    large-magnitude ``z``.
+    ``-log(sigmoid(z))`` for ``y == 1`` and ``-log(1 - sigmoid(z))`` for
+    ``y == 0``, but stays finite for large-magnitude ``z``.
     """
     labels = np.asarray(y, dtype=float).ravel()
     scores = np.asarray(logits, dtype=float).ravel()
@@ -184,9 +157,9 @@ def _loss_and_gradient(
 ) -> tuple[float, np.ndarray]:
     """Mean cross-entropy and its gradient from one shared ``design @ theta``.
 
-    ``fit`` evaluates this once per optimization state, so it forms the logits
-    once and derives both quantities from that array instead of paying for a
-    second ``design @ theta`` inside ``logistic_gradient``. The public
+    ``fit`` calls this once per optimization state, so it forms the logits once
+    and derives both quantities from that array instead of computing a second
+    ``design @ theta`` inside ``logistic_gradient``. The public
     ``logistic_loss`` and ``logistic_gradient`` stay independent entry points
     for callers and for the finite-difference tests.
     """
@@ -203,7 +176,7 @@ class FitResult:
 
     ``loss_history[k]`` and ``gradient_norm_history[k]`` hold the mean
     cross-entropy and the largest absolute gradient component measured at the
-    parameters after exactly ``k`` updates: index 0 describes the zero
+    parameters after exactly ``k`` updates. Index 0 describes the zero
     initialization, ``steps`` counts the parameter updates performed, and the
     histories hold ``steps + 1`` entries. The last entry always describes the
     returned ``theta``, including when ``max_steps`` capped the run after its
@@ -236,7 +209,7 @@ def fit(
     exclude it from model selection.
 
     The returned ``theta`` is always the parameters of the last recorded
-    history entry: the zero initialization is recorded first, and a candidate
+    history entry. The zero initialization is recorded first, and a candidate
     update is committed only once its loss and gradient are known to be
     finite. A run capped by ``max_steps`` therefore reports the state produced
     by its final update rather than a stale pre-update one.
@@ -275,8 +248,8 @@ def fit(
     # after exactly ``k`` updates, starting with the zero initialization at
     # index 0. An update is committed only after its loss and gradient are
     # known to be finite, so the returned ``theta`` is always the state of the
-    # final history entry -- including the update that a ``max_steps`` cap
-    # leaves as the last one.
+    # final history entry, including the update that a ``max_steps`` cap leaves
+    # as the last one.
     loss, gradient = _loss_and_gradient(design, labels, theta)
     while True:
         norm = float(np.max(np.abs(gradient)))
@@ -360,7 +333,7 @@ def predict_proba(X: np.ndarray, theta: np.ndarray) -> np.ndarray:
 
 
 def predict(X: np.ndarray, theta: np.ndarray, threshold: float = 0.5) -> np.ndarray:
-    """Hard 0/1 labels: probabilities greater than or equal to ``threshold``."""
+    """Hard 0/1 labels, where a probability at or above ``threshold`` predicts 1."""
     cutoff = float(threshold)
     if not 0.0 <= cutoff <= 1.0:
         raise ValueError("threshold must lie in [0, 1]")
@@ -409,7 +382,7 @@ def binary_metrics(
 
 # %% Experiment helpers
 def _class_counts(labels: np.ndarray) -> dict[str, int]:
-    """Class counts keyed by meaning for the remapped 0/1 labels."""
+    """Counts of benign (0) and malignant (1) samples."""
     return {
         "benign": int(np.sum(labels == 0)),
         "malignant": int(np.sum(labels == 1)),
@@ -460,35 +433,35 @@ def _build_protocol(
                 "source_malignant": 0,
                 "source_benign": 1,
                 "note": (
-                    "The bundled dataset encodes malignant as 0; this experiment "
-                    "remaps malignant to the positive class 1 and benign to 0 before "
-                    "splitting and records the remap explicitly."
+                    "The bundled dataset encodes malignant as 0. This experiment remaps "
+                    "malignant to the positive class 1 and benign to 0 before splitting."
                 ),
             },
             "coursework": (
-                "Protocol rebuild of the CSC781 Module 6 Assignment 6 logistic-regression "
-                "exercise with its normalization, learning-rate and threshold caveats "
-                "corrected; no historical outputs or report scores are reused."
+                "This experiment reimplements the CSC781 Module 6 Assignment 6 protocol. "
+                "It corrects normalization and selection of the learning rate and threshold. "
+                "It reuses no historical outputs or report scores."
             ),
         },
         "preprocessing": {
             "scaler": "z-score using the population mean and standard deviation",
             "fit_on": (
-                "training split only; the same stored statistics transform the "
-                "development and test splits"
+                "The scaler fits training data only. It uses the stored statistics "
+                "to transform development and test data."
             ),
             "constant_features": (
-                "a zero-variance training column keeps scale 1.0, so its transformed values are 0.0"
+                "A zero-variance training column keeps scale 1.0, so its transformed values "
+                "are 0.0."
             ),
         },
         "splits": {
-            "strategy": "stratified by class label, 60% train / 20% dev / 20% test",
+            "strategy": "stratified by class label into 60% train, 20% dev and 20% test",
             "train_fraction": 0.6,
             "dev_fraction": 0.2,
             "test_fraction": 0.2,
             "seed_policy": (
-                "each seed independently re-splits all samples; selection uses only the "
-                "dev split and the held-out test split is scored after selection"
+                "Each seed independently re-splits all samples. Selection uses only the "
+                "dev split, and the held-out test split is scored after selection."
             ),
             "seeds": [int(seed) for seed in seeds],
         },
@@ -499,16 +472,16 @@ def _build_protocol(
             "max_steps": MAX_STEPS,
             "tolerance": GRADIENT_TOLERANCE,
             "convergence_policy": (
-                "each step computes the full-batch gradient; the run stops when "
-                "max|gradient| < tolerance or after max_steps, whichever comes first; "
-                "a non-finite loss or update stops the run, marks it diverged and "
-                "excludes it from model selection"
+                "Each step computes the full-batch gradient. The run stops when "
+                "max|gradient| < tolerance or after max_steps, whichever comes first. "
+                "A non-finite loss or update stops the run, marks it diverged and "
+                "excludes it from model selection."
             ),
         },
         "selection": {
             "criterion": (
-                "highest development positive-class F1 over the joint "
-                "(learning rate, threshold) grid among non-diverged runs"
+                "Highest development positive-class F1 across learning rates and "
+                "thresholds among runs that did not diverge."
             ),
             "threshold_grid": {
                 "start": 0.1,
@@ -521,13 +494,13 @@ def _build_protocol(
                 "meaning": "malignant",
             },
             "tie_break": "smallest threshold, then smallest learning rate",
-            "held_out": "the test split is scored once per seed, only after selection",
+            "held_out": "Each model evaluates the test split once per seed after selection.",
         },
         "metrics": {
             "accuracy": "fraction of correctly labelled held-out samples",
-            "positive_precision": "precision for positive class 1 (malignant)",
-            "positive_recall": "recall for positive class 1 (malignant)",
-            "positive_f1": "F1 for positive class 1 (malignant)",
+            "positive_precision": "precision for malignant cases, positive class 1",
+            "positive_recall": "recall for malignant cases, positive class 1",
+            "positive_f1": "F1 for malignant cases, positive class 1",
             "roc_auc": "threshold-independent AUC over the predicted probabilities",
             "confusion_matrix": (
                 "[[true negatives, false positives], [false negatives, true positives]]"
@@ -543,10 +516,10 @@ def _build_protocol(
                 "tol": 1e-10,
             },
             "training_data": (
-                "same scaled training split and label remap as the NumPy implementation"
+                "The same scaled training split and label remap as the NumPy implementation."
             ),
             "threshold_selection": (
-                "independent development positive-class F1 sweep over the same threshold grid"
+                "An independent development positive-class F1 sweep over the same threshold grid."
             ),
             "role": "independent implementation check on identical data",
         },
@@ -555,21 +528,20 @@ def _build_protocol(
             "purpose": "report seed-to-seed variation of the selected protocol",
         },
         "intended_use": (
-            "Educational methods showcase on a small bundled dataset; the outputs are "
-            "not validated for diagnosis or treatment, so no clinical deployment claim "
-            "is made."
+            "This experiment uses a small teaching dataset. "
+            "Do not use its outputs for diagnosis or treatment."
         ),
     }
 
 
 def run_seed(features: np.ndarray, labels: np.ndarray, seed: int) -> dict[str, Any]:
-    """Run split, fit, selection and evaluation for one seed.
+    """Run the split, fit, selection and evaluation stages for one seed.
 
     The scaler is fitted on the training split only. Every learning rate is
-    fitted on the training split by full-batch gradient descent; the learning
+    fitted on the training split by full-batch gradient descent. The learning
     rate and decision threshold are then chosen jointly by the highest
-    unrounded development positive-class F1, and only afterwards is the
-    selected model evaluated on the untouched test split. An unregularized
+    unrounded development positive-class F1. Only afterwards is the selected
+    model scored on the untouched test split. An unregularized
     ``LogisticRegression`` baseline runs the same preprocessing and its own
     independent development threshold.
     """
@@ -773,7 +745,8 @@ def run_experiment(seeds: Sequence[int] = DEFAULT_SEEDS) -> dict[str, Any]:
     features = np.asarray(dataset.data, dtype=float)
     observed = np.asarray(dataset.target, dtype=int)
     # The bundled dataset encodes malignant as 0 and benign as 1. The remap
-    # makes malignant the positive class so precision/recall/F1 describe it.
+    # makes malignant the positive class, so precision, recall and F1 describe
+    # malignant cases.
     labels = (observed == 0).astype(int)
     runs = [run_seed(features, labels, seed) for seed in seed_list]
     return {
@@ -807,12 +780,12 @@ def plot_loss_curves(runs: Sequence[dict[str, Any]], output_path: Path) -> None:
             steps = np.arange(curve.size)
             axis.plot(steps, curve, linewidth=1.4, label=f"rate {entry['learning_rate']}")
         axis.set_title(f"seed {run['seed']}")
-        axis.set_xlabel("completed gradient-descent steps (0 = initial weights)")
+        axis.set_xlabel("Completed gradient-descent steps\nStep 0 uses the initial weights")
         axis.set_yscale("log")
         axis.grid(alpha=0.3)
-    axes[0][0].set_ylabel("mean binary cross-entropy (train)")
+    axes[0][0].set_ylabel("Mean binary cross-entropy on training data")
     axes[0][-1].legend(fontsize=8)
-    figure.suptitle("Training loss by learning rate (max 3000 full-batch steps)")
+    figure.suptitle("Training loss by learning rate\nAt most 3000 full-batch steps")
     figure.tight_layout()
     save_figure(figure, output_path)
 
@@ -872,7 +845,7 @@ def plot_comparison(
         right.bar(positions + offset, means, width, yerr=errors, capsize=3, label=label)
     right.set_xticks(positions, display_names)
     right.set_ylim(0.0, 1.05)
-    right.set_ylabel("test metric (mean +/- SD over seeds)")
+    right.set_ylabel("Test metric\nMean and population standard deviation across seeds")
     right.set_title("Selected model versus unregularized baseline")
     right.grid(axis="y", alpha=0.3)
     right.legend(fontsize=8)
@@ -913,7 +886,7 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         nargs="+",
         default=list(DEFAULT_SEEDS),
-        help="seeds; each one reruns the full split/selection/evaluation protocol",
+        help="seeds; each one repeats the full split, selection and evaluation protocol",
     )
     args = parser.parse_args(argv)
 

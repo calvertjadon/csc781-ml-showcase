@@ -1,13 +1,13 @@
 {
   "protocol": {
     "provenance": {
-      "dataset": "CIFAR-100 (100 classes, 600 images per class)",
+      "dataset": "CIFAR-100 with 100 classes and 600 images per class",
       "loader": "torchvision.datasets.CIFAR100",
       "official_train_samples": 50000,
       "official_test_samples": 10000,
-      "coursework": "Protocol rebuild of the CSC781 Module 8 Assignment 9 transfer-learning exercise; no historical outputs or report scores are reused.",
+      "coursework": "This experiment reimplements the CSC781 Module 8 Assignment 9 protocol. It reuses no historical outputs or report scores.",
       "initial_weights": {
-        "scratch": "weights=None (random initialisation)",
+        "scratch": "weights=None for random initialization",
         "pretrained": {
           "name": "DenseNet161_Weights.IMAGENET1K_V1",
           "url": "https://download.pytorch.org/models/densenet161-8d451a50.pth",
@@ -15,14 +15,14 @@
             "acc@1": 77.138,
             "acc@5": 93.56
           },
-          "note": "publicly reported metadata of the checkpoint, not a result of this experiment; the pretrained variant loads these weights and replaces the 1000-class head with a fresh 100-class head"
+          "note": "The provider published these checkpoint metrics. This experiment did not measure them. The pretrained variant loads the weights and replaces the 1000-class head with a new 100-class head."
         }
       }
     },
     "splits": {
-      "strategy": "stratified 90/10 carve of the official CIFAR-100 training split",
+      "strategy": "stratified 90% training and 10% development split of official training data",
       "seed": 42,
-      "policy": "both variants train on the same 45000 images and select checkpoints on the same 5000 development images; the official 10000-image test split is a separate dataset scored once after selection",
+      "policy": "Both variants train on the same 45000 images and select checkpoints on the same 5000 development images. Each then evaluates the separate official 10000-image test split once.",
       "counts": {
         "train": 45000,
         "dev": 5000,
@@ -353,7 +353,7 @@
         0.224,
         0.225
       ],
-      "note": "crop_size=64 / resize_size=74 override the weights' standard 224/256 resolution; normalisation constants and bilinear interpolation are inherited from the weights recipe, and both variants share this transform"
+      "note": "The transform resizes to 74 pixels and crops to 64 instead of the weights' standard 256-pixel resize and 224-pixel crop. Both variants use the weights' normalization and bilinear interpolation."
     },
     "seeds": {
       "model_and_shuffle": [
@@ -381,16 +381,16 @@
     "selection": {
       "criterion": "best development macro F1 over all 100 classes",
       "tie_break": "earliest epoch",
-      "held_out": "the official test split is evaluated once per run after reloading the selected checkpoint"
+      "held_out": "Each run reloads the selected checkpoint and evaluates the official test split once."
     },
     "budget": {
-      "policy": "fixed epoch budget (default 1 epoch); this is a disclosed compute budget, not a convergence criterion"
+      "policy": "Each run trains for a fixed number of epochs, 1 by default. The epoch limit sets the compute budget. It does not test convergence."
     },
     "freezing": {
       "scratch": "every parameter is trainable",
-      "pretrained": "all backbone parameters require no gradient and the features module is re-applied to eval() after every model.train(), so BatchNorm running buffers stay frozen; only the replacement classifier is optimised",
+      "pretrained": "Backbone parameters require no gradients. After each model.train(), the training loop puts features back into eval() to keep BatchNorm buffers frozen. The optimizer updates only the replacement classifier.",
       "optimizer_parameters": "only parameters with requires_grad=True",
-      "caveat": "the pretrained variant therefore has far fewer trainable parameters than the scratch variant; the comparison measures initialisation plus freezing as deployed, not an equal-parameter-count control",
+      "caveat": "The pretrained variant updates fewer parameters than scratch. The comparison tests initialization and freezing together, not initialization alone with equal trainable parameter counts.",
       "parameter_counts": {
         "scratch": {
           "total": 26692900,

@@ -28,7 +28,7 @@ checkpoints/
 *.npz
 *.npy
 
-# Local environment files, logs, and editor/OS artifacts
+# Local environment files, logs, and editor and operating-system files
 .env
 .env.*
 !.env.example
@@ -38,5 +38,5 @@ checkpoints/
 .DS_Store
 Thumbs.db
 
-# uv.lock and everything under results/ (JSON metrics and PNG figures) are
-# committed on purpose: they are the reproducible evidence this showcase publishes.
+# uv.lock and everything under results/ (JSON metrics and PNG figures) stay
+# committed on purpose: the project publishes them as reproducible evidence.

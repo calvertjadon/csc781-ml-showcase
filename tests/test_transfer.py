@@ -1,12 +1,12 @@
-"""Consumer-visible behaviour of mlshowcase.transfer.
+"""Public behavior of mlshowcase.transfer.
 
-Every fixture is a tiny real ``nn.Module`` graph, the backbone fixtures sharing
-DenseNet's ``features`` / ``classifier`` split, with hand-set weights whose
-gradient flow can be checked by hand and hand-written logits whose per-sample
-losses can be worked out by hand, so the expected values come from worked
-arithmetic rather than from the module under test. Nothing here
+The fixtures are tiny real ``nn.Module`` graphs, and the backbone fixture uses
+DenseNet's ``features`` and ``classifier`` split. The fixtures set their weights
+explicitly so their gradients can be checked by hand, and they supply logits
+whose per-sample losses can be worked out by hand, so the expected values come
+from worked arithmetic rather than from the module under test. Nothing here
 downloads model weights, loads CIFAR-100, or trains a full model. Torch is an
-optional dependency, so this whole module is skipped when it is not installed.
+optional dependency, so the whole module is skipped when it is not installed.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ transfer = importlib.import_module("mlshowcase.transfer")
 
 
 class TinyBatchNormNet(torch.nn.Module):
-    """Minimal real network with the same ``features``/``classifier`` split as DenseNet."""
+    """Minimal real network with the same ``features`` and ``classifier`` split as DenseNet."""
 
     def __init__(self, num_classes: int = 100) -> None:
         super().__init__()
@@ -90,7 +90,7 @@ def _score_classes_zero_and_one(model: TinyBatchNormNet) -> None:
     """Score class 0 as ``+h`` and class 1 as ``-h``; all other logits stay flat.
 
     The hand-checked backbone gradient in the scratch test uses these exact head
-    weights: other head rows would rescale the BatchNorm input gradients.
+    weights. Other head rows would rescale the BatchNorm input gradients.
     """
     with torch.no_grad():
         model.classifier.weight.zero_()
@@ -155,9 +155,9 @@ def test_scratch_training_updates_backbone_parameters_and_bn_running_stats() -> 
         "cpu",
     )
 
-    # With the class-0/class-1 head the BatchNorm input gradients for the three
-    # one-hot images are (dx0, dx1, dx2) ~= (-0.68, 1.01, -0.34), so each
-    # input-channel weight of the 1x1 convolution moves by lr * dx.
+    # With the class-0 and class-1 head rows, the BatchNorm input gradients for
+    # the three one-hot images are (dx0, dx1, dx2) ~= (-0.68, 1.01, -0.34), so
+    # each input-channel weight of the 1x1 convolution moves by lr * dx.
     assert not torch.equal(model.features[0].weight.detach(), conv_before)
     # Running statistics only change while BatchNorm is in training mode.
     assert not torch.equal(model.features[1].running_mean.detach(), running_mean_before)

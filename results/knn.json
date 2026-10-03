@@ -1,7 +1,7 @@
 {
   "protocol": {
     "provenance": {
-      "dataset": "scikit-learn bundled handwritten digits (8x8 grayscale images)",
+      "dataset": "scikit-learn bundled handwritten digits with 8-by-8 grayscale images",
       "loader": "sklearn.datasets.load_digits()",
       "network_access_required": false,
       "n_samples": 1797,
@@ -18,18 +18,18 @@
         8,
         9
       ],
-      "coursework": "Protocol rebuild of the CSC781 Module 2 Assignment 2 k-NN exercise; no historical outputs or report scores are reused."
+      "coursework": "This experiment reimplements the CSC781 Module 2 Assignment 2 k-NN protocol. It reuses no historical outputs or report scores."
     },
     "preprocessing": {
       "steps": "none",
-      "detail": "raw pixel intensities (0-16) cast to float64; no scaling, centering or feature selection, so all 64 features participate in every distance"
+      "detail": "The code casts raw pixel intensities from 0 to 16 to float64. It applies no scaling, centering or feature selection. Every distance uses all 64 features."
     },
     "splits": {
-      "strategy": "stratified by class label, 60% train / 20% dev / 20% test",
+      "strategy": "stratified by class label into 60% train, 20% dev and 20% test",
       "train_fraction": 0.6,
       "dev_fraction": 0.2,
       "test_fraction": 0.2,
-      "seed_policy": "each seed independently re-splits all samples; selection uses only the dev split and the held-out test split is scored after selection",
+      "seed_policy": "Each seed splits all samples again. Development data selects the configuration. Each model then evaluates the test split.",
       "per_seed": {
         "42": {
           "counts": {
@@ -198,12 +198,12 @@
         }
       ],
       "vote_tie_break": "smallest class label",
-      "neighbor_ordering": "stable sort: equal distances keep training-row order"
+      "neighbor_ordering": "stable sort, so equal distances keep training-row order"
     },
     "selection": {
       "criterion": "maximum macro F1 on the dev split",
       "tie_break": "smallest k, then metric order euclidean, manhattan, minkowski (p=1.5)",
-      "held_out": "the test split is scored once per seed, only after selection"
+      "held_out": "Each model evaluates the test split once per seed after selection."
     },
     "metrics": {
       "accuracy": "fraction of correctly predicted held-out samples",

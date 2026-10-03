@@ -1,4 +1,4 @@
-"""Behavioral tests for the shared showcase infrastructure."""
+"""Behavioral tests for the shared helpers in ``mlshowcase.common``."""
 
 from __future__ import annotations
 
@@ -78,8 +78,9 @@ def test_fractions_summing_to_one_leave_an_empty_test_partition():
 
 
 def test_boundary_split_matches_a_large_held_out_protocol():
-    # 50,000 observations over 100 classes: the CIFAR-100 train-set protocol
-    # carves 45,000 train / 5,000 dev while an external test set is held out.
+    # 50,000 observations over 100 classes: the CIFAR-100 training-set protocol
+    # splits them into 45,000 train and 5,000 dev indices while an external test
+    # set is held out.
     labels = np.repeat(np.arange(100), 500)
 
     split = stratified_split(labels, seed=42, train_fraction=0.9, dev_fraction=0.1)

@@ -17,21 +17,21 @@
       "label_remap": {
         "source_malignant": 0,
         "source_benign": 1,
-        "note": "The bundled dataset encodes malignant as 0; this experiment remaps malignant to the positive class 1 and benign to 0 before splitting and records the remap explicitly."
+        "note": "The bundled dataset encodes malignant as 0. This experiment remaps malignant to the positive class 1 and benign to 0 before splitting."
       },
-      "coursework": "Protocol rebuild of the CSC781 Module 6 Assignment 6 logistic-regression exercise with its normalization, learning-rate and threshold caveats corrected; no historical outputs or report scores are reused."
+      "coursework": "This experiment reimplements the CSC781 Module 6 Assignment 6 protocol. It corrects normalization and selection of the learning rate and threshold. It reuses no historical outputs or report scores."
     },
     "preprocessing": {
       "scaler": "z-score using the population mean and standard deviation",
-      "fit_on": "training split only; the same stored statistics transform the development and test splits",
-      "constant_features": "a zero-variance training column keeps scale 1.0, so its transformed values are 0.0"
+      "fit_on": "The scaler fits training data only. It uses the stored statistics to transform development and test data.",
+      "constant_features": "A zero-variance training column keeps scale 1.0, so its transformed values are 0.0."
     },
     "splits": {
-      "strategy": "stratified by class label, 60% train / 20% dev / 20% test",
+      "strategy": "stratified by class label into 60% train, 20% dev and 20% test",
       "train_fraction": 0.6,
       "dev_fraction": 0.2,
       "test_fraction": 0.2,
-      "seed_policy": "each seed independently re-splits all samples; selection uses only the dev split and the held-out test split is scored after selection",
+      "seed_policy": "Each seed independently re-splits all samples. Selection uses only the dev split, and the held-out test split is scored after selection.",
       "seeds": [
         42,
         43,
@@ -49,10 +49,10 @@
       ],
       "max_steps": 3000,
       "tolerance": 1e-06,
-      "convergence_policy": "each step computes the full-batch gradient; the run stops when max|gradient| < tolerance or after max_steps, whichever comes first; a non-finite loss or update stops the run, marks it diverged and excludes it from model selection"
+      "convergence_policy": "Each step computes the full-batch gradient. The run stops when max|gradient| < tolerance or after max_steps, whichever comes first. A non-finite loss or update stops the run, marks it diverged and excludes it from model selection."
     },
     "selection": {
-      "criterion": "highest development positive-class F1 over the joint (learning rate, threshold) grid among non-diverged runs",
+      "criterion": "Highest development positive-class F1 across learning rates and thresholds among runs that did not diverge.",
       "threshold_grid": {
         "start": 0.1,
         "stop": 0.9,
@@ -82,13 +82,13 @@
         "meaning": "malignant"
       },
       "tie_break": "smallest threshold, then smallest learning rate",
-      "held_out": "the test split is scored once per seed, only after selection"
+      "held_out": "Each model evaluates the test split once per seed after selection."
     },
     "metrics": {
       "accuracy": "fraction of correctly labelled held-out samples",
-      "positive_precision": "precision for positive class 1 (malignant)",
-      "positive_recall": "recall for positive class 1 (malignant)",
-      "positive_f1": "F1 for positive class 1 (malignant)",
+      "positive_precision": "precision for malignant cases, positive class 1",
+      "positive_recall": "recall for malignant cases, positive class 1",
+      "positive_f1": "F1 for malignant cases, positive class 1",
       "roc_auc": "threshold-independent AUC over the predicted probabilities",
       "confusion_matrix": "[[true negatives, false positives], [false negatives, true positives]]"
     },
@@ -101,8 +101,8 @@
         "max_iter": 10000,
         "tol": 1e-10
       },
-      "training_data": "same scaled training split and label remap as the NumPy implementation",
-      "threshold_selection": "independent development positive-class F1 sweep over the same threshold grid",
+      "training_data": "The same scaled training split and label remap as the NumPy implementation.",
+      "threshold_selection": "An independent development positive-class F1 sweep over the same threshold grid.",
       "role": "independent implementation check on identical data"
     },
     "repeats": {
@@ -113,7 +113,7 @@
       ],
       "purpose": "report seed-to-seed variation of the selected protocol"
     },
-    "intended_use": "Educational methods showcase on a small bundled dataset; the outputs are not validated for diagnosis or treatment, so no clinical deployment claim is made."
+    "intended_use": "This experiment uses a small teaching dataset. Do not use its outputs for diagnosis or treatment."
   },
   "environment": {
     "python": {

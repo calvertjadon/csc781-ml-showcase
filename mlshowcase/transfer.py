@@ -1,19 +1,20 @@
 """Matched DenseNet-161 transfer-learning comparison on CIFAR-100.
 
-The experiment rebuilds the CSC781 Module 8 Assignment 9 exercise as a matched,
-selection-safe protocol:
+The experiment rebuilds the CSC781 Module 8 Assignment 9 exercise and selects
+checkpoints on development data before scoring the test split once:
 
-* ``scratch`` - DenseNet-161 trained from random initialisation (``weights=None``),
-* ``pretrained`` - DenseNet-161 initialised from the ImageNet-1K weights, with the
-  backbone parameters *and* the BatchNorm running buffers frozen and a fresh
-  100-class head.
+* ``scratch`` trains DenseNet-161 from random initialisation (``weights=None``).
+* ``pretrained`` initialises DenseNet-161 from the ImageNet-1K weights and
+  freezes the backbone parameters *and* the BatchNorm running buffers, then
+  installs a fresh 100-class head.
 
-Both variants see the same stratified 45000/5000 carve of the official CIFAR-100
-training split, the same 64 px preprocessing derived from the DenseNet-161
-weights recipe (normalisation and bilinear interpolation inherited, standard
-224/256 resolution overridden), and the same fixed-budget SGD settings. The
-official 10000-image test split is scored once, after the best development
-macro-F1 checkpoint has been selected.
+Both variants train on the same stratified 45000/5000 partition of the official
+CIFAR-100 training images and on the same 64 px preprocessing built from the
+DenseNet-161 weights transforms, which keep their normalisation constants and
+bilinear interpolation but replace the standard 224/256 resolution. Both also
+run under the same SGD settings and fixed epoch budget (one epoch by default).
+The experiment scores the official 10000-image test split once, after it
+selects the best development macro-F1 checkpoint.
 
 Run from the repository root::
 
@@ -21,14 +22,14 @@ Run from the repository root::
 
 The first run downloads CIFAR-100 through torchvision and the DenseNet-161
 IMAGENET1K_V1 weights. The run writes ``transfer.json`` and two PNG figures into
-the output directory (default ``results/``). Selected checkpoints are written to
-``<output-dir>/checkpoints/`` for local inspection only: they are git-ignored and
-are not referenced by the JSON evidence.
+the output directory (default ``results/``). It writes selected checkpoints to
+``<output-dir>/checkpoints/`` for local inspection only: git ignores them and
+the JSON evidence does not reference them.
 
-The CLI prints flushed progress lines while it works: run and epoch starts,
-periodic batch and sample counts, the development and final-test phases, the
-selected checkpoint and the elapsed times. The reusable helpers accept an
-optional progress callback and otherwise stay quiet.
+The CLI prints flushed progress lines as it works: the start of the run and of
+each epoch, periodic batch and sample counts, the development and final-test
+evaluations, the selected checkpoint, and the elapsed times. The reusable
+helpers accept an optional progress callback and otherwise stay quiet.
 """
 
 from __future__ import annotations
@@ -50,8 +51,8 @@ from torch.utils.data import DataLoader, Dataset, Subset
 
 from mlshowcase.common import environment, stratified_split, write_results
 
-# Figures are always written to PNG files, so pin a headless backend that
-# behaves identically in a terminal and in headless renders.
+# Figures are always written to PNG files, so select the Agg backend, which
+# draws without a display.
 plt.switch_backend("Agg")
 
 RESULT_NAME = "transfer"
@@ -82,21 +83,21 @@ _VARIANT_COLORS = {"scratch": "tab:orange", "pretrained": "tab:blue"}
 
 # %% Environment and preprocessing
 def resolve_device(specification: str) -> torch.device:
-    """Resolve ``"auto"`` (CUDA when available, else CPU) or an explicit device."""
+    """Resolve ``"auto"`` to CUDA when available and to CPU otherwise; validate any other name."""
     name = str(specification).strip().lower()
     if name == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device(name)
     if device.type == "cuda" and not torch.cuda.is_available():
-        raise ValueError("device 'cuda' was requested but CUDA is not available")
+        raise ValueError("cannot use the 'cuda' device because CUDA is not available")
     return device
 
 
 def seed_everything(seed: int) -> torch.Generator:
     """Seed Python, NumPy and torch; return the DataLoader shuffle generator.
 
-    Both variants receive a generator seeded with the same value, so they see
-    the same shuffling order and the comparison stays matched.
+    Both variants get a generator seeded with the same value, so they shuffle in
+    the same order and the comparison stays matched.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -109,11 +110,12 @@ def seed_everything(seed: int) -> torch.Generator:
 
 
 def build_transform(crop_size: int = CROP_SIZE, resize_size: int = RESIZE_SIZE) -> Any:
-    """Build the DenseNet-161 weights recipe at the experiment's input size.
+    """Build the DenseNet-161 weights transforms at the experiment's input size.
 
-    ``weights.transforms(...)`` inherits the checkpoint's normalisation constants,
-    interpolation mode and antialiasing while overriding the standard 224/256
-    resolution; both variants use this exact transform.
+    ``weights.transforms(crop_size=..., resize_size=...)`` keeps the checkpoint's
+    normalisation constants, interpolation mode and antialiasing, and sets the
+    input size to the values given instead of the standard 224/256 resolution.
+    Both variants use this exact transform.
     """
     from torchvision.models import DenseNet161_Weights
 
@@ -123,7 +125,7 @@ def build_transform(crop_size: int = CROP_SIZE, resize_size: int = RESIZE_SIZE) 
 
 
 def describe_transform(transform: Any) -> dict[str, Any]:
-    """Return the public, JSON-ready description of a weights transform instance."""
+    """Return JSON-ready details of a weights transform instance."""
     return {
         "source": "DenseNet161_Weights.IMAGENET1K_V1.transforms",
         "resize_size": int(transform.resize_size[0]),
@@ -135,16 +137,16 @@ def describe_transform(transform: Any) -> dict[str, Any]:
         "mean": [float(value) for value in transform.mean],
         "std": [float(value) for value in transform.std],
         "note": (
-            "crop_size=64 / resize_size=74 override the weights' standard 224/256 "
-            "resolution; normalisation constants and bilinear interpolation are "
-            "inherited from the weights recipe, and both variants share this transform"
+            "The transform resizes to 74 pixels and crops to 64 instead of the "
+            "weights' standard 256-pixel resize and 224-pixel crop. "
+            "Both variants use the weights' normalization and bilinear interpolation."
         ),
     }
 
 
 # %% Model construction and freezing
 def build_model(variant: str, num_classes: int = NUM_CLASSES) -> nn.Module:
-    """Build one variant: ``scratch`` (random init) or ``pretrained`` (frozen backbone)."""
+    """Build ``scratch`` from random initialisation or ``pretrained`` with a frozen backbone."""
     from torchvision.models import DenseNet161_Weights, densenet161
 
     if variant == "scratch":
@@ -158,9 +160,10 @@ def build_model(variant: str, num_classes: int = NUM_CLASSES) -> nn.Module:
 def freeze_backbone_for_transfer(model: nn.Module, num_classes: int = NUM_CLASSES) -> nn.Module:
     """Freeze every existing parameter and install a fresh trainable classifier.
 
-    Frozen ``requires_grad`` alone is not enough for BatchNorm: ``model.train()``
-    would still update the running buffers. :func:`train_epoch` therefore holds
-    the ``features`` module in ``eval()`` after every ``train()`` call.
+    Setting ``requires_grad = False`` is not enough to freeze BatchNorm:
+    ``model.train()`` would still update the running buffers. :func:`train_epoch`
+    therefore puts the ``features`` module back into ``eval()`` after every
+    ``train()`` call.
     """
     for parameter in model.parameters():
         parameter.requires_grad = False
@@ -170,7 +173,7 @@ def freeze_backbone_for_transfer(model: nn.Module, num_classes: int = NUM_CLASSE
 
 
 def trainable_parameters(model: nn.Module) -> list[nn.Parameter]:
-    """Return the parameters an optimiser should own for this model."""
+    """Return the parameters with ``requires_grad=True``, the ones the optimiser updates."""
     return [parameter for parameter in model.parameters() if parameter.requires_grad]
 
 
@@ -184,25 +187,26 @@ def _hold_frozen_modules_in_eval(model: nn.Module, frozen_prefixes: Sequence[str
 # One periodic progress line every this many batches, plus one for the final batch.
 PROGRESS_EVERY_BATCHES = 25
 
-# A progress sink receives one finished line at a time. The reusable helpers
-# never print by themselves: they stay quiet unless a sink is passed, which is
-# how the tests exercise them and how the CLI opts into visible progress.
+# A progress callback receives one finished line at a time. The reusable helpers
+# never print by themselves: they stay quiet unless the caller passes a
+# callback, which is how the tests exercise them and how the CLI turns on
+# visible progress.
 ProgressCallback = Callable[[str], None]
 
 
 def _print_progress(message: str) -> None:
-    """CLI sink: flush every line so a long run reports while it is running."""
+    """CLI callback: print and flush each line so a long run reports while it runs."""
     print(message, flush=True)
 
 
 def _emit_progress(progress: ProgressCallback | None, message: str) -> None:
-    """Send one status line to ``progress``; no sink means no output."""
+    """Send one status line to ``progress``; when it is ``None``, print nothing."""
     if progress is not None:
         progress(message)
 
 
 def _scoped_progress(progress: ProgressCallback | None, scope: str) -> ProgressCallback | None:
-    """Prefix every message with ``scope``, or stay ``None`` when there is no sink."""
+    """Prefix every message with ``scope``, or return ``None`` when there is no callback."""
     if progress is None:
         return None
 
@@ -221,12 +225,12 @@ def _known_length(collection: Any) -> int | None:
 
 
 def _count_text(value: int | None) -> str:
-    """Render a known length, or ``?`` when the collection cannot report one."""
+    """Return the length as text, or ``?`` when the collection cannot report one."""
     return "?" if value is None else str(value)
 
 
 def _fraction(done: int, total: int | None) -> str:
-    """``done/total`` when the total is known, just ``done`` otherwise."""
+    """Return ``done/total`` when the total is known, and just ``done`` otherwise."""
     return f"{done}/{total}" if total is not None else str(done)
 
 
@@ -255,9 +259,9 @@ def train_epoch(
 ) -> dict[str, Any]:
     """Train for one epoch and return the sample-count-weighted mean loss.
 
-    Batch losses are weighted by each batch's actual sample count, so an
+    Each batch loss is weighted by that batch's actual sample count, so an
     undersized final batch cannot distort the epoch loss. ``frozen_prefixes``
-    names submodules kept in ``eval()`` (frozen BatchNorm buffers) after
+    names submodules that stay in ``eval()`` (frozen BatchNorm buffers) while
     ``model.train()`` puts the rest of the model into training mode.
 
     ``progress`` receives one line every ``PROGRESS_EVERY_BATCHES`` batches and
@@ -307,10 +311,10 @@ def evaluate(
 ) -> dict[str, Any]:
     """Evaluate a split: sample-weighted loss, accuracy and all-class macro F1.
 
-    Macro F1 requests every class index from 0 to ``num_classes - 1``, so a class
-    absent from the split still contributes a zero to the macro average.
+    The macro F1 average covers every class index from 0 to ``num_classes - 1``,
+    so a class absent from the split still contributes a zero to the average.
 
-    ``progress`` receives the same periodic batch/sample updates as
+    ``progress`` receives the same periodic batch and sample updates as
     :func:`train_epoch`; leaving it ``None`` keeps the helper quiet.
     """
     model.eval()
@@ -371,7 +375,7 @@ def load_cifar100(data_dir: Path, transform: Any) -> tuple[Dataset, Dataset]:
 
 
 def split_train_dev(labels: np.ndarray, seed: int = SPLIT_SEED) -> tuple[np.ndarray, np.ndarray]:
-    """Stratified 90/10 carve of the official training labels (45000/5000).
+    """Stratified 90/10 split of the official training labels (45000/5000).
 
     The shared splitter's test remainder is empty by design here: the official
     CIFAR-100 test images are a separate held-out dataset, not a remainder of
@@ -425,9 +429,10 @@ def run_variant(
     """Train one variant for one seed and return its evidence record.
 
     ``progress`` receives the run's status lines: the start of each epoch, the
-    periodic batch/sample updates from :func:`train_epoch` and :func:`evaluate`,
-    the development and final-test phase boundaries, the selected checkpoint and
-    the total run time. Leaving it ``None`` keeps the run quiet for library use.
+    periodic batch and sample updates from :func:`train_epoch` and
+    :func:`evaluate`, the start and end of the development and final-test
+    evaluations, the selected checkpoint, and the total run time. Leaving it
+    ``None`` keeps the run quiet for library use.
     """
     run_start = time.perf_counter()
     emit = _scoped_progress(progress, f"{variant} seed {seed}")
@@ -593,7 +598,7 @@ def _count_classes(labels: np.ndarray) -> dict[str, int]:
 
 
 def _weights_metadata() -> dict[str, Any]:
-    """Public provenance for the ImageNet checkpoint used by the pretrained variant."""
+    """Return provenance metadata for the ImageNet checkpoint the pretrained variant loads."""
     from torchvision.models import DenseNet161_Weights
 
     weights = DenseNet161_Weights.IMAGENET1K_V1
@@ -603,9 +608,9 @@ def _weights_metadata() -> dict[str, Any]:
         "url": weights.url,
         "source_imagenet_1k_metrics": {str(key): float(value) for key, value in metrics.items()},
         "note": (
-            "publicly reported metadata of the checkpoint, not a result of this "
-            "experiment; the pretrained variant loads these weights and replaces the "
-            "1000-class head with a fresh 100-class head"
+            "The provider published these checkpoint metrics. This experiment did not "
+            "measure them. The pretrained variant loads the weights and replaces the "
+            "1000-class head with a new 100-class head."
         ),
     }
 
@@ -634,26 +639,28 @@ def _build_protocol(
     }
     return {
         "provenance": {
-            "dataset": "CIFAR-100 (100 classes, 600 images per class)",
+            "dataset": "CIFAR-100 with 100 classes and 600 images per class",
             "loader": "torchvision.datasets.CIFAR100",
             "official_train_samples": int(labels.size),
             "official_test_samples": int(test_labels.size),
             "coursework": (
-                "Protocol rebuild of the CSC781 Module 8 Assignment 9 transfer-learning "
-                "exercise; no historical outputs or report scores are reused."
+                "This experiment reimplements the CSC781 Module 8 Assignment 9 protocol. "
+                "It reuses no historical outputs or report scores."
             ),
             "initial_weights": {
-                "scratch": "weights=None (random initialisation)",
+                "scratch": "weights=None for random initialization",
                 "pretrained": _weights_metadata(),
             },
         },
         "splits": {
-            "strategy": "stratified 90/10 carve of the official CIFAR-100 training split",
+            "strategy": (
+                "stratified 90% training and 10% development split of official training data"
+            ),
             "seed": SPLIT_SEED,
             "policy": (
-                "both variants train on the same 45000 images and select checkpoints on "
-                "the same 5000 development images; the official 10000-image test split is "
-                "a separate dataset scored once after selection"
+                "Both variants train on the same 45000 images and select checkpoints "
+                "on the same 5000 development images. Each then evaluates the "
+                "separate official 10000-image test split once."
             ),
             "counts": {
                 "train": int(train_index.size),
@@ -692,28 +699,28 @@ def _build_protocol(
             "criterion": "best development macro F1 over all 100 classes",
             "tie_break": "earliest epoch",
             "held_out": (
-                "the official test split is evaluated once per run after reloading the "
-                "selected checkpoint"
+                "Each run reloads the selected checkpoint and evaluates "
+                "the official test split once."
             ),
         },
         "budget": {
             "policy": (
-                "fixed epoch budget (default 1 epoch); this is a disclosed compute "
-                "budget, not a convergence criterion"
+                "Each run trains for a fixed number of epochs, 1 by default. "
+                "The epoch limit sets the compute budget. It does not test convergence."
             )
         },
         "freezing": {
             "scratch": "every parameter is trainable",
             "pretrained": (
-                "all backbone parameters require no gradient and the features module is "
-                "re-applied to eval() after every model.train(), so BatchNorm running "
-                "buffers stay frozen; only the replacement classifier is optimised"
+                "Backbone parameters require no gradients. After each model.train(), "
+                "the training loop puts features back into eval() to keep BatchNorm "
+                "buffers frozen. The optimizer updates only the replacement classifier."
             ),
             "optimizer_parameters": "only parameters with requires_grad=True",
             "caveat": (
-                "the pretrained variant therefore has far fewer trainable parameters "
-                "than the scratch variant; the comparison measures initialisation plus "
-                "freezing as deployed, not an equal-parameter-count control"
+                "The pretrained variant updates fewer parameters than scratch. "
+                "The comparison tests initialization and freezing together, "
+                "not initialization alone with equal trainable parameter counts."
             ),
             "parameter_counts": parameter_counts,
         },
@@ -740,8 +747,8 @@ def run_experiment(
 ) -> dict[str, Any]:
     """Run the matched protocol for every variant and seed; return the evidence payload.
 
-    ``progress`` is forwarded to every :func:`run_variant` call so the CLI can
-    stream status lines; leaving it ``None`` keeps the function quiet.
+    The function forwards ``progress`` to every :func:`run_variant` call so the
+    CLI can stream status lines; leaving it ``None`` keeps the function quiet.
     """
     if epochs < 1:
         raise ValueError(f"epochs must be >= 1, got {epochs}")
@@ -766,7 +773,7 @@ def run_experiment(
     checkpoint_dir = Path(output_dir) / CHECKPOINT_DIRECTORY
     _emit_progress(
         progress,
-        f"split: {train_index.size} train / {dev_index.size} dev samples; "
+        f"split: {train_index.size} train and {dev_index.size} dev samples; "
         f"{test_labels.size} official test samples",
     )
 
@@ -851,7 +858,7 @@ def summarize_runs(runs: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
 
 # %% Figures
 # Learning-curve panels label every recorded epoch while the run is short; longer
-# runs fall back to a locator that is still pinned to whole epochs.
+# runs switch to a locator that still keeps ticks on whole epochs.
 MAX_EPOCH_TICKS = 12
 
 
@@ -864,10 +871,10 @@ def save_figure(fig: plt.Figure, output_path: Path) -> None:
 def plot_learning_curves(runs: dict[str, list[dict[str, Any]]], output_path: Path) -> None:
     """Plot development macro F1 and loss per epoch for each variant and seed.
 
-    Series are drawn against the whole epochs that were actually recorded. A run
-    that recorded a single epoch is a single measured point: it is drawn as an
-    isolated marker on the integer tick ``1``, so the panel cannot be read as a
-    curve over a fractional epoch axis.
+    Each series uses the whole epochs the run recorded. A run with a single epoch
+    is one measured point, which the function draws as an isolated marker at the
+    integer tick ``1``, so the panel cannot be read as a curve over a fractional
+    epoch axis.
     """
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.5))
     panels = (
@@ -895,13 +902,13 @@ def plot_learning_curves(runs: dict[str, list[dict[str, Any]]], output_path: Pat
                     values,
                     color=color,
                     marker="o",
-                    # A one-epoch run is one measured point, so draw no line at
-                    # all: there is no measured trajectory to connect.
+                    # A one-epoch run is one measured point, so draw no line:
+                    # there is no second point to connect it to.
                     linestyle="none" if len(epochs) == 1 else "-",
                     markersize=7.0 if len(epochs) == 1 else 6.0,
                     linewidth=1.4,
                     alpha=0.35 if repeats > 1 else 0.9,
-                    label=f"{variant} (seed {record['seed']})",
+                    label=f"{variant}, seed {record['seed']}",
                 )
         if repeats > 1:
             epochs = [int(entry["epoch"]) for entry in records[0]["history"]]
@@ -920,11 +927,11 @@ def plot_learning_curves(runs: dict[str, list[dict[str, Any]]], output_path: Pat
                     label=f"{variant} mean",
                 )
     for panel, _, title, ylabel in panels:
-        panel.set_title(f"{title} (1 epoch)" if single_epoch else title)
+        panel.set_title(f"{title}\nOne recorded epoch" if single_epoch else title)
         panel.set_xlabel("epoch")
         panel.set_ylabel(ylabel)
         panel.grid(alpha=0.3)
-        # Ticks sit on the whole epochs that were recorded: a one-epoch run gets
+        # Ticks mark the whole epochs that were recorded: a one-epoch run gets
         # a single tick at 1 instead of a fractional 0.96-1.04 axis.
         if len(observed_epochs) <= MAX_EPOCH_TICKS:
             panel.set_xticks(observed_epochs)
@@ -941,10 +948,8 @@ def plot_learning_curves(runs: dict[str, list[dict[str, Any]]], output_path: Pat
 def plot_comparison(runs: dict[str, list[dict[str, Any]]], output_path: Path) -> None:
     """Compare final test scores and parameter counts between the two variants.
 
-    Error bars are drawn only when more than one seed was recorded: a single-seed
-    run shows its measured scores as plain bars whose title says so, instead of a
-    zero-length population-std interval that would imply a variability estimate
-    the run does not contain.
+    The function draws error bars for runs with multiple seeds. A single-seed
+    run shows plain bars because one observation cannot estimate variability.
     """
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.5))
     seed_count = max(len(records) for records in runs.values())
@@ -978,9 +983,12 @@ def plot_comparison(runs: dict[str, list[dict[str, Any]]], output_path: Path) ->
     axes[0].set_ylim(0.0, 1.05)
     axes[0].set_ylabel("held-out test score")
     axes[0].set_title(
-        "Official test split (1 seed)\nno error bars"
+        "Official test split\nOne seed. No error bars."
         if seed_count == 1
-        else f"Official test split ({seed_count} seeds)\nerror bars: population std"
+        else (
+            f"Official test split, {seed_count} seeds\n"
+            "Error bars show population standard deviation"
+        )
     )
     axes[0].legend(fontsize=8)
 
@@ -998,8 +1006,8 @@ def plot_comparison(runs: dict[str, list[dict[str, Any]]], output_path: Path) ->
             axes[1].text(position, value, f"{value:,}", ha="center", va="bottom", fontsize=8)
     axes[1].set_yscale("log")
     axes[1].set_xticks(parameter_positions, list(VARIANTS))
-    axes[1].set_ylabel("parameters (log scale)")
-    axes[1].set_title("Unequal trainable parameters\n(frozen backbone vs new head)")
+    axes[1].set_ylabel("Parameters\nLog scale")
+    axes[1].set_title("Trainable parameter counts differ\nFrozen backbone and new head")
     axes[1].legend(fontsize=8)
     # Reserved inter-panel spacing keeps both two-line titles fully inside their
     # own panel instead of colliding across the gap.
@@ -1021,7 +1029,7 @@ def write_figures(runs: dict[str, list[dict[str, Any]]], output_dir: Path) -> di
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the matched DenseNet-161 protocol and write JSON evidence plus figures."""
     parser = argparse.ArgumentParser(
-        description="Matched DenseNet-161 scratch vs ImageNet transfer on CIFAR-100",
+        description="DenseNet-161 scratch training compared with ImageNet transfer on CIFAR-100",
     )
     parser.add_argument(
         "--epochs",
@@ -1034,7 +1042,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=int,
         nargs="+",
         default=[DEFAULT_SEED],
-        help="model/shuffle seeds; each one reruns both variants (default: 42)",
+        help="model and shuffle seeds; each one reruns both variants (default: 42)",
     )
     parser.add_argument(
         "--device",
@@ -1045,7 +1053,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--batch-size",
         type=int,
         default=DEFAULT_BATCH_SIZE,
-        help="batch size for train/dev/test (default: 32)",
+        help="batch size for the train, dev, and test loaders (default: 32)",
     )
     parser.add_argument(
         "--threads",

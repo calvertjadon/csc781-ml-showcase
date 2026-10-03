@@ -1,104 +1,112 @@
-# Handwritten k-nearest neighbours on digits: seeded selection and agreement with scikit-learn
+# Handwritten k-nearest neighbors on digits
 
-**Question.** Can a from-scratch NumPy k-nearest-neighbours classifier — distances, exhaustive
-ranking, majority vote — reproduce `sklearn.neighbors.KNeighborsClassifier` under one identical
-protocol, and which (distance, k) configuration does development-split selection choose on the
-bundled 8×8 digit images?
+## Question and implementation
 
-This rebuild of the CSC781 Module 2 Assignment 2 k-NN exercise keeps the assignment's goal and
-corrects its methodology: all 64 features are used, labels stay integer arrays separate from the
-pixels, the sweep executes instead of a commented-out loop fixed at Manhattan `k = 5`, and splits
-are seeded and stratified. It is not a new architecture.
+Does a NumPy k-NN classifier reproduce `sklearn.neighbors.KNeighborsClassifier`
+on the same data and hyperparameters? Which distance and neighborhood size does
+selection on development data choose for the bundled 8-by-8 digit images?
 
-**Contribution.** Handwritten: three distances over all features, one exhaustive ranking per
-metric reused across every `k`, majority vote with both tie rules, `KNNClassifier`, and the
-protocol/JSON/figure harness. Library: `load_digits`, `train_test_split` (inside
-`stratified_split`), accuracy / macro F1 / confusion matrix, matplotlib, and the
-`KNeighborsClassifier(algorithm="brute")` reference.
+I wrote the distance calculations, neighbor rankings, majority vote,
+`KNNClassifier`, and experiment code in [mlshowcase/knn.py](../mlshowcase/knn.py).
+The code computes one ranking per distance metric and reuses it for each `k`.
+Scikit-learn supplies the dataset, split function, metrics, and reference
+classifier. Matplotlib draws the figures.
 
-**Evidence and code:**
-[`mlshowcase/knn.py`](../mlshowcase/knn.py), [`mlshowcase/common.py`](../mlshowcase/common.py),
-[`results/knn.json`](../results/knn.json), [`results/knn_dev_sweep.png`](../results/knn_dev_sweep.png),
-[`results/knn_baseline.png`](../results/knn_baseline.png),
-[`notebooks/knn.ipynb`](../notebooks/knn.ipynb), [`tests/test_knn.py`](../tests/test_knn.py).
-Tests pin the all-feature reductions (worked examples 13→5 and 19→7 when the last pixel is
-dropped), label dtype, `p >= 1` / `k` validation, ranking reuse, and both tie rules.
+[Notebook](../notebooks/knn.ipynb) · [Tests](../tests/test_knn.py) ·
+[Results](../results/knn.json) · [Split helper](../mlshowcase/common.py)
+
+## Corrections to the coursework
+
+The original Euclidean and Manhattan loops omitted the final feature. The new
+calculations use all 64 features. The tests check examples whose distances change
+from 13 to 5 and from 19 to 7 if the final feature is dropped.
+
+The original combined labels with pixel values, converting integer labels to
+floats. This implementation keeps them in separate arrays. It also runs the
+hyperparameter sweep that the original notebook commented out and replaces the
+fixed Manhattan `k = 5` choice with development-set selection. Seeds and
+stratification replace the original unseeded splits.
 
 ## Protocol
 
-- **Data and splits.** `load_digits()`: 1797 samples × 64 features, 10 classes, no network; raw
-  pixel intensities with no scaling or feature selection. The bundled copy is the
-  1,797-observation UCI *test* partition, not redistributed. Stratified 60/20/20 splits are
-  redrawn per seed 42/43/44, each giving 1078 / 359 / 360 rows; selection uses dev only and test is
-  scored once afterwards.
-- **Sweep.** `k ∈ {1, 3, 5, 7, 9, 11, 15}` × {Euclidean, Manhattan, Minkowski `p = 1.5`} = 21
+- `load_digits()` supplies 1,797 samples with 64 features and 10 classes without
+  a download. This is the UCI dataset's test partition. The code uses raw pixel
+  intensities without scaling or feature selection.
+- Seeds 42, 43, and 44 each produce a stratified split with 1,078 training rows,
+  359 development rows, and 360 test rows. Development data selects the
+  configuration. Each model evaluates the test split after selection.
+- The sweep tests seven values of `k`, 1, 3, 5, 7, 9, 11, and 15. Each uses
+  Euclidean, Manhattan, or Minkowski distance with `p = 1.5`. That gives 21
   candidates per seed.
-- **Selection.** Maximum unrounded dev macro F1; ties go to the smallest `k`, then to metric order
-  Euclidean → Manhattan → Minkowski.
-- **Tie rules, stated separately.** Vote-count ties pick the smallest class label. Equal distances
-  keep training-row order, so which equally distant rows fall inside the first `k` is
-  row-order-determined; that boundary membership, not the vote, can change the prediction.
-- **Baseline.** `KNeighborsClassifier(algorithm="brute")` on the same rows with the identical
-  selected configuration; an implementation check, not a tuned competitor.
-- **Runtime.** CPython 3.12.13, Linux x86_64, Ryzen 7 7840U; versions in the JSON (torch listed,
-  unused). Recorded stages — selection with the ranking passes, fit, evaluation, baseline — total
-  0.69 / 0.65 / 1.11 s per seed: about one second per seed.
+- Selection maximizes unrounded development macro F1. Ties choose the smallest
+  `k`, then prefer Euclidean, Manhattan, and Minkowski in that order.
+- A tied vote chooses the smallest class label. Equal distances retain training
+  row order. That order can affect which rows enter the first `k` neighbors.
+- The reference `KNeighborsClassifier(algorithm="brute")` uses the same training
+  rows and selected configuration. This checks the implementation rather than
+  comparing independently tuned classifiers.
 
 ## Results
 
-| Seed | Selected on dev | Dev macro F1 | Test accuracy | Test macro F1 |
+| Seed | Selected configuration | Development macro F1 | Test accuracy | Test macro F1 |
 | --- | --- | --- | --- | --- |
-| 42 | euclidean, k=1 | 0.9888 | 0.9750 | 0.9750 |
-| 43 | euclidean, k=1 | 0.9915 | 0.9806 | 0.9805 |
-| 44 | minkowski (p=1.5), k=3 | 0.9776 | 0.9861 | 0.9860 |
+| 42 | Euclidean, k=1 | 0.9888 | 0.9750 | 0.9750 |
+| 43 | Euclidean, k=1 | 0.9915 | 0.9806 | 0.9805 |
+| 44 | Minkowski, p=1.5, k=3 | 0.9776 | 0.9861 | 0.9860 |
 
-Held-out macro F1 is 0.9805 ± 0.0045, accuracy 0.9806 ± 0.0045 (population SD, three seeds);
-sklearn's rows are identical field for field: `predictions_match` is true for every recorded seed
-(3 × 360 held-out rows). Dev macro F1 declines with `k` on all three distances. Seed 43 exercised
-the tie-break: Euclidean `k=1` and Minkowski `p=1.5` `k=1` tie at 0.9915 dev macro F1, and metric
-order chose Euclidean.
+The mean test macro F1 is 0.9805 with a population standard deviation of 0.0045.
+Mean accuracy is 0.9806 with the same standard deviation. Scikit-learn produced
+identical predictions on all 360 test rows for each seed. The JSON records
+`predictions_match = true` for every run.
 
-**Figures.** [`knn_dev_sweep.png`](../results/knn_dev_sweep.png) plots dev macro F1 and accuracy
-against `k` per distance (per-seed lines, metric means, starred selections, zoomed axes);
-[`knn_baseline.png`](../results/knn_baseline.png) shows per-seed held-out bars for both models on
-the full 0–1.05 scale plus seed 42's confusion matrices, equal because predictions match.
+Development scores generally fell as `k` increased. On seed 43, Euclidean and
+Minkowski with `k = 1` tied at 0.9915 development macro F1. The metric preference
+selected Euclidean.
 
-## Interpretation and failures
+The runs used CPython 3.12.13 on Linux x86_64 and an AMD Ryzen 7 7840U. Each seed
+took 0.69, 0.65, or 1.11 seconds for selection, fitting, and evaluation of both
+implementations. The JSON contains package versions. Torch appears in that
+record because the environment had it installed, but k-NN does not use it.
 
-- **Agreement is implementation evidence, not superiority.** The baseline receives the
-  handwritten-selected configuration, so this is not an independent comparison and shows neither
-  implementation better.
-- **Three seeds do not generalize every boundary tie.** Agreement is empirical for these splits:
-  equal-distance neighbours are ordered by training-row order, so a `k`-boundary tie can change
-  which labels vote, and the recorded runs may not contain such a case.
-- **Small-`k` preference is not a general finding.** Selections differ across seeds and held-out
-  macro F1 spans 0.9750–0.9860. No preprocessing is swept, and the
-  exhaustive ranking costs one query–train pass per metric — reproducible, not indexed or
-  approximate; timings are provenance.
+[knn_dev_sweep.png](../results/knn_dev_sweep.png) plots development scores against
+`k`, with individual seeds, means, selected points, and zoomed axes.
+[knn_baseline.png](../results/knn_baseline.png) plots held-out scores on axes from
+0 to 1.05 and the two matching confusion matrices for seed 42.
 
-## Limitations
+## Interpretation and limitations
 
-- Three overlapping splits of one 1797-row dataset; mean ± SD is descriptive only, no confidence
-  interval, and results apply to this dataset and protocol alone.
-- Agreement covers the recorded splits and pinned test behaviours, not every input; whether
-  equal-distance ordering ever changed a recorded prediction is not recorded.
+Agreement on these splits does not prove agreement for every input or show that
+one implementation is better. Both models use the configuration selected by the
+NumPy implementation. The recorded results do not say whether a tied distance at
+the neighborhood boundary affected any prediction.
 
-## Reproduction
+The selected configurations differ across seeds, and test macro F1 ranges from
+0.9750 to 0.9860. Three overlapping splits of one small dataset do not establish
+a general preference for a distance metric or neighborhood size. Their standard
+deviation describes those runs only. It is not a confidence interval.
 
-```console
+The implementation computes distances between every query and training row for
+each metric. It uses neither an index nor approximate search. No experiment
+varies preprocessing, and the results apply only to this dataset and protocol.
+
+## Reproduce
+
+From the repository root:
+
+```sh
 uv run --locked python -m mlshowcase.knn --output-dir results --seeds 42 43 44
+uv run --locked pytest tests/test_knn.py
 ```
 
-Rewrites `results/knn.json` and both PNGs. Focused check:
-`uv run --locked pytest tests/test_knn.py`. The notebook loads the stored JSON and figures and
-never retrains (run with `notebooks/` as cwd, or set `MLSHOWCASE_ROOT`).
+The experiment command rewrites the JSON and both figures. The notebook reads
+those files without rerunning the experiment. Use `notebooks/` as its working
+directory, or set `MLSHOWCASE_ROOT` to the checkout root.
 
-## Data, rights, and citation
+## Attribution
 
-- **Dataset.** *Optical Recognition of Handwritten Digits*, E. Alpaydin and C. Kaynak (1998), UCI
-  Machine Learning Repository, CC BY 4.0, DOI [10.24432/C50P49](https://doi.org/10.24432/C50P49);
-  loaded via `sklearn.datasets.load_digits()` (bundled 1,797-observation UCI test partition),
-  bytes not redistributed — full attribution in
-  [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
-- scikit-learn 1.9.1 supplies the reference estimator, split primitive and metrics; original
-  coursework materials are not included, reproduced or linked.
+E. Alpaydin and C. Kaynak published *Optical Recognition of Handwritten Digits*
+in 1998. UCI distributes it under CC BY 4.0,
+[DOI 10.24432/C50P49](https://doi.org/10.24432/C50P49). Scikit-learn bundles the
+1,797-observation test partition used here. This repository does not distribute
+the dataset or original coursework materials. See
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) for the sources and terms.

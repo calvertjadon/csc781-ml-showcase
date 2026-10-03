@@ -1,14 +1,18 @@
 """Handwritten k-nearest neighbours on the scikit-learn digits dataset.
 
-The reusable part of this module is a from-scratch NumPy implementation of
-Euclidean, Manhattan and Minkowski distances plus a lazy ``KNNClassifier`` that
-supports noncontiguous labels, deterministic tie-breaking and a ranking API that
-lets a caller sweep neighbourhood sizes without recomputing distances.
+The module computes Euclidean, Manhattan and Minkowski distances in NumPy and
+provides a ``KNNClassifier`` that stores the training split and ranks its rows
+at prediction time. It returns the original label values, so class labels need
+not be contiguous, resolves vote ties toward the smallest class label, keeps
+equal distances in training-row order, and ranks every training row once, which
+lets a caller sweep ``k`` without recomputing distances.
 
-The experiment part rebuilds the CSC781 Module 2 Assignment 2 protocol as a
-seeded, stratified, selection-safe run and compares the handwritten classifier
-with ``sklearn.neighbors.KNeighborsClassifier`` on identical data. Run it from
-the repository root::
+The experiment reruns the CSC781 Module 2 Assignment 2 protocol with fixed
+seeds and a stratified split into train, dev and test parts. It selects one
+distance and ``k`` on the dev split, scores the test split only afterwards, and
+compares the handwritten classifier with
+``sklearn.neighbors.KNeighborsClassifier`` on identical rows. Run it from the
+repository root::
 
     uv run --locked python -m mlshowcase.knn --output-dir results --seeds 42 43 44
 
@@ -33,8 +37,8 @@ from sklearn.neighbors import KNeighborsClassifier
 
 from mlshowcase.common import environment, stratified_split, write_results
 
-# Figures are always written to PNG files, so pin a headless backend that
-# behaves identically in a terminal and in headless renders.
+# Figures are always written to PNG files, so select the headless Agg backend,
+# which behaves the same in a terminal and in headless runs.
 plt.switch_backend("Agg")
 
 __all__ = [
@@ -249,8 +253,8 @@ class KNNClassifier:
     metric:
         ``"euclidean"``, ``"manhattan"`` or ``"minkowski"``.
     p:
-        Minkowski exponent. Required for (and only used by) ``"minkowski"``;
-        values below 1 are rejected.
+        Minkowski exponent, required for ``"minkowski"`` and rejected for the
+        other metrics; values below 1 are rejected.
     """
 
     def __init__(
@@ -316,7 +320,7 @@ class DistanceSpec:
 
     @property
     def label(self) -> str:
-        """Human-readable label used in figures and printouts."""
+        """Label shown in figures and printouts."""
         if self.p is None:
             return self.name
         return f"{self.name} (p={self.p:g})"
@@ -375,7 +379,7 @@ def _sklearn_baseline(n_neighbors: int, metric: str, p: float | None) -> KNeighb
 
 
 def run_seed(features: np.ndarray, labels: np.ndarray, seed: int) -> dict[str, Any]:
-    """Run the full protocol for one seed: split, dev sweep, selection, held-out."""
+    """Run the full protocol for one seed: split, dev sweep, selection, held-out scoring."""
     split = stratified_split(labels, seed, train_fraction=TRAIN_FRACTION, dev_fraction=DEV_FRACTION)
     train_index = np.asarray(split.train)
     dev_index = np.asarray(split.dev)
@@ -416,7 +420,7 @@ def run_seed(features: np.ndarray, labels: np.ndarray, seed: int) -> dict[str, A
     if selection is None:
         raise RuntimeError("no sweep configuration was evaluated")
 
-    # The held-out split is touched only now, after the configuration is fixed.
+    # The held-out split is used only now, after the configuration is fixed.
     model = KNNClassifier(n_neighbors=selection["k"], metric=selection["metric"], p=selection["p"])
     fit_start = time.perf_counter()
     model.fit(train_x, train_y)
@@ -537,32 +541,33 @@ def _build_protocol(
     """Describe the dataset, preprocessing, splits, selection and baseline."""
     return {
         "provenance": {
-            "dataset": "scikit-learn bundled handwritten digits (8x8 grayscale images)",
+            "dataset": "scikit-learn bundled handwritten digits with 8-by-8 grayscale images",
             "loader": "sklearn.datasets.load_digits()",
             "network_access_required": False,
             "n_samples": int(features.shape[0]),
             "n_features": int(features.shape[1]),
             "classes": [int(value) for value in np.unique(labels)],
             "coursework": (
-                "Protocol rebuild of the CSC781 Module 2 Assignment 2 k-NN exercise; "
-                "no historical outputs or report scores are reused."
+                "This experiment reimplements the CSC781 Module 2 Assignment 2 k-NN protocol. "
+                "It reuses no historical outputs or report scores."
             ),
         },
         "preprocessing": {
             "steps": "none",
             "detail": (
-                "raw pixel intensities (0-16) cast to float64; no scaling, centering or "
-                "feature selection, so all 64 features participate in every distance"
+                "The code casts raw pixel intensities from 0 to 16 to float64. "
+                "It applies no scaling, centering or feature selection. "
+                "Every distance uses all 64 features."
             ),
         },
         "splits": {
-            "strategy": "stratified by class label, 60% train / 20% dev / 20% test",
+            "strategy": "stratified by class label into 60% train, 20% dev and 20% test",
             "train_fraction": TRAIN_FRACTION,
             "dev_fraction": DEV_FRACTION,
             "test_fraction": round(1.0 - TRAIN_FRACTION - DEV_FRACTION, 10),
             "seed_policy": (
-                "each seed independently re-splits all samples; selection uses only the "
-                "dev split and the held-out test split is scored after selection"
+                "Each seed splits all samples again. Development data selects the "
+                "configuration. Each model then evaluates the test split."
             ),
             "per_seed": {
                 str(run["seed"]): {
@@ -577,12 +582,12 @@ def _build_protocol(
             "k_grid": list(K_GRID),
             "distances": [{"metric": spec.name, "p": spec.p} for spec in DISTANCE_GRID],
             "vote_tie_break": "smallest class label",
-            "neighbor_ordering": "stable sort: equal distances keep training-row order",
+            "neighbor_ordering": "stable sort, so equal distances keep training-row order",
         },
         "selection": {
             "criterion": "maximum macro F1 on the dev split",
             "tie_break": "smallest k, then metric order euclidean, manhattan, minkowski (p=1.5)",
-            "held_out": "the test split is scored once per seed, only after selection",
+            "held_out": "Each model evaluates the test split once per seed after selection.",
         },
         "metrics": {
             "accuracy": "fraction of correctly predicted held-out samples",
@@ -621,13 +626,13 @@ _METRIC_COLORS = {
 
 # Every dev score sits in a narrow band near 1, so the sweep figure zooms its
 # y-axis to the observed scores (individual seeds, metric means and selection
-# stars) instead of hiding every difference behind a full 0-1 span.
+# stars) instead of showing a full 0-1 span that would compress every difference.
 _ZOOM_PADDING_FRACTION = 0.05
 _ZOOM_MIN_PADDING = 0.01
 
 
 def _zoomed_axis_limits(values: Sequence[float]) -> tuple[float, float]:
-    """Zoomed y-limits around ``values``: modest padding, clipped to [0, 1]."""
+    """Y-limits zoomed around ``values``, with modest padding and clipped to [0, 1]."""
     low = float(np.min(values))
     high = float(np.max(values))
     padding = _ZOOM_PADDING_FRACTION * (high - low)
@@ -646,7 +651,7 @@ def plot_dev_curves(runs: list[dict[str, Any]], output_path: Path) -> None:
     """Plot dev macro F1 and accuracy against k, one colour per distance.
 
     The y-axes are zoomed to the observed scores because the sweep values sit in
-    a narrow band near 1; the titles and axis labels state the restriction, while
+    a narrow band near 1. The titles and axis labels state the restriction, and
     the baseline figure keeps the full 0-1 scale so effect sizes stay comparable.
     """
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.5), sharex=True)
@@ -694,13 +699,13 @@ def plot_dev_curves(runs: list[dict[str, Any]], output_path: Path) -> None:
         plotted_values["accuracy"].append(selection["dev_accuracy"])
     for panel, score_key, score_name in panels:
         low, high = _zoomed_axis_limits(plotted_values[score_key])
-        panel.set_title(f"Dev split: {score_name} vs k (y-axis zoomed to {low:.3f}-{high:.3f})")
-        panel.set_xlabel("k (number of neighbours)")
-        panel.set_ylabel(f"{score_name} (y-axis zoomed)")
+        panel.set_title(f"Development {score_name} by k\nY-axis zoomed to {low:.3f} to {high:.3f}")
+        panel.set_xlabel("Number of neighbors, k")
+        panel.set_ylabel(f"{score_name}\nZoomed y-axis")
         panel.set_xticks(list(K_GRID))
         panel.set_ylim(low, high)
         panel.grid(True, axis="y", color="0.85", linewidth=0.6)
-    axes[0].legend(title="distance (stars mark selections)", fontsize=8)
+    axes[0].legend(title="Distance\nStars mark selections", fontsize=8)
     save_figure(fig, output_path)
 
 
@@ -726,7 +731,7 @@ def plot_baseline_comparison(runs: list[dict[str, Any]], output_path: Path) -> N
         )
         panel.set_xticks(positions, seed_labels)
         panel.set_ylim(0.0, 1.05)
-        panel.set_title(f"{title} (identical selected configuration)")
+        panel.set_title(f"{title}\nBoth models use the selected configuration")
         panel.legend(fontsize=8, loc="lower right")
     first = runs[0]
     matrices = (
@@ -738,7 +743,7 @@ def plot_baseline_comparison(runs: list[dict[str, Any]], output_path: Path) -> N
         matrix = np.asarray(summary["confusion_matrix"])
         artist = panel.imshow(matrix, cmap="Blues")
         ticks = summary["confusion_matrix_labels"]
-        panel.set_title(f"{label}: seed {first['seed']} confusion matrix")
+        panel.set_title(f"{label}\nSeed {first['seed']} confusion matrix")
         panel.set_xlabel("predicted")
         panel.set_ylabel("true")
         panel.set_xticks(range(len(ticks)), ticks)
@@ -754,6 +759,7 @@ def plot_baseline_comparison(runs: list[dict[str, Any]], output_path: Path) -> N
                     fontsize=8,
                 )
         fig.colorbar(artist, ax=panel, fraction=0.046, pad=0.04)
+    fig.tight_layout()
     save_figure(fig, output_path)
 
 
@@ -784,7 +790,7 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         nargs="+",
         default=list(DEFAULT_SEEDS),
-        help="seeds; each one reruns the full split/selection/evaluation protocol",
+        help="seeds; each one repeats the full split, selection and evaluation protocol",
     )
     args = parser.parse_args(argv)
 

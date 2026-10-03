@@ -1,9 +1,10 @@
-"""Shared, public-safe infrastructure for the CSC 781 showcase experiments.
+"""Shared helpers for the CSC 781 experiments.
 
 Experiment modules import their split, environment metadata, and results writer
-from this module so that protocols stay comparable across experiments. Only the
-core scientific stack is required; optional distributions such as the CPU-only
-PyTorch extras are reported when installed and never assumed.
+from this module so that protocols stay comparable across experiments. The
+module needs numpy and scikit-learn. It reports optional distributions, such as
+the CPU-only PyTorch extras, when they are installed and never assumes they are
+present.
 """
 
 from __future__ import annotations
@@ -123,13 +124,12 @@ def stratified_split(
 
 
 def _cpu_model() -> str:
-    """Return a public-safe CPU model description, or ``""`` when unavailable.
+    """Return the CPU model name, or ``""`` when it is unavailable.
 
     ``platform.processor()`` is the portable source and is commonly empty on
-    Linux, where the ``model name`` field of ``/proc/cpuinfo`` is read as a
-    fallback. Only that single field is extracted, so serial numbers and other
-    machine identifiers that may appear in ``/proc/cpuinfo`` never reach the
-    result.
+    Linux, so the function then reads the ``model name`` field of
+    ``/proc/cpuinfo``. It extracts only that one field, so serial numbers and
+    other machine identifiers in ``/proc/cpuinfo`` never reach the result.
     """
     model = platform.processor().strip()
     if model or platform.system() != "Linux":
@@ -146,14 +146,14 @@ def _cpu_model() -> str:
 
 
 def environment() -> dict[str, Any]:
-    """Return public-safe interpreter, OS, CPU, and package-version metadata.
+    """Return interpreter, OS, CPU, and package-version metadata without personal identifiers.
 
-    Only aggregate platform data is reported: never absolute paths, hostnames,
-    usernames, or machine identifiers such as serial numbers. The CPU is
-    described by its logical ``cpu_count`` and a public ``cpu_model`` string
-    (the processor name, or the Linux ``/proc/cpuinfo`` ``model name`` when
-    the interpreter reports no processor). Optional distributions (for example
-    the CPU-only PyTorch extras) appear only when installed.
+    The result holds aggregate platform data only: no absolute paths, hostnames,
+    usernames, or machine identifiers such as serial numbers. The CPU appears as
+    its logical ``cpu_count`` and a ``cpu_model`` name, which is the processor
+    name, or the Linux ``/proc/cpuinfo`` ``model name`` when the interpreter
+    reports no processor. Optional distributions, for example the CPU-only
+    PyTorch extras, appear only when installed.
     """
     packages: dict[str, str] = {}
     for distribution in _METADATA_PACKAGES:
@@ -181,9 +181,10 @@ def environment() -> dict[str, Any]:
 def write_results(output_dir: Path, name: str, payload: dict) -> Path:
     """Write ``payload`` as strict, finite JSON to ``output_dir/<name>.json``.
 
-    The output directory and its parents are created when missing. Non-finite
-    values such as NaN or Infinity raise :class:`ValueError` instead of being
-    emitted as non-standard JSON tokens, and no partial file is left behind.
+    The writer creates the output directory and its parents when missing. It
+    raises :class:`ValueError` for non-finite values such as NaN or Infinity
+    instead of writing non-standard JSON tokens, and it never leaves a partial
+    file behind.
     """
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
